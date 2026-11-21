@@ -1,0 +1,20 @@
+html, body { margin: 0; height: 100%; background: #07070c; overflow: hidden; }
+body { display: flex; align-items: center; justify-content: center; }
+
+#wrap {
+  position: relative;
+  height: min(100vh, 150vw);
+  aspect-ratio: 2 / 3;
+}
+canvas {
+  width: 100%; height: 100%;
+  display: block;
+  image-rendering: pixelated;   
+}
+
+#wrap::after {
+  content: "";
+  position: absolute; inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(to bottom, rgba(0,0,0,.18) 0 1px, transparent 1px 3px);
+}
