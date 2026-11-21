@@ -65,7 +65,8 @@ function generateChunk(y) {
     const x = WALL + randInt(0, Math.floor((W - 2 * WALL - w) / 8)) * 8;
     blocks.push({ x, y: y + randInt(0, 4) * 8, w, h: 8 });
   }
-}
+    if (Math.random() < 0.7) spawnEnemy(y + randInt(0,5) * 8);  }
+{}
 
 function updateWorld() {
   while (nextGenY < camY + H + 64) {
@@ -156,7 +157,7 @@ function drawPlayer() {
   ctx.fillStyle = C.bg;  ctx.fillRect(x + 1, y + 2, 1, 2); ctx.fillRect(x + 4, y + 2, 1, 2); 
    ctx.fillStyle = C.red; ctx.fillRect(x, y + 6, p.w, 2);          
 }
-// ---------- particles ----------
+
 function burst(x, y, n, color, speed) {
   for (let i = 0; i < n; i++) {
     const a = Math.random() * Math.PI * 2, s = rand(speed * 0.3, speed);
@@ -172,10 +173,10 @@ function updateParticles(dt) {
   for (const q of particles) {
     q.x += q.vx * dt;
     q.y += q.vy * dt;
-    q.vy += 200 * dt;        // gravity
+    q.vy += 200 * dt;        
     q.life -= dt;
   }
-  particles = particles.filter(q => q.life > 0);   // remove dead ones
+  particles = particles.filter(q => q.life > 0);   
 }
 
 function drawParticles() {
@@ -187,13 +188,13 @@ function drawParticles() {
 function updateShooting(dt) {
   const p = player;
   p.shootCd -= dt;
-  if (p.onGround) { p.ammo = p.maxAmmo; p.combo = 0; return; }   // landing reloads
+  if (p.onGround) { p.ammo = p.maxAmmo; p.combo = 0; return; }   
 
   if (keys.jump && p.shootCd <= 0 && p.ammo > 0) {
     p.ammo--;
-    p.shootCd = 0.11;                                   // about 9 shots per second
+    p.shootCd = 0.11;                                   
     bullets.push({ x: p.x + p.w / 2 - 1, y: p.y + p.h, w: 2, h: 6, vy: 320, life: 0.45 });
-    if (p.vy > -60) p.vy = Math.max(p.vy - 45, -60);    // recoil slows your fall
+    if (p.vy > -60) p.vy = Math.max(p.vy - 45, -60);   
     shake = Math.max(shake, 1);
     }
   }
@@ -201,7 +202,7 @@ function updateBullets(dt) {
   for (const b of bullets) {
     b.y += b.vy * dt;
     b.life -= dt;
-    for (const bl of blocks) {                  // bullets smash blocks
+    for (const bl of blocks) {                  
       if (overlap(b, bl)) {
         bl.dead = true;
         b.life = 0;
@@ -209,6 +210,15 @@ function updateBullets(dt) {
         shake = Math.max(shake, 1.5);
       }
     }
+     for (const e of enemies) {
+      if (!e.dead && overlap (b, e)) {
+        b.life = 0;
+        e.hp--;
+        e.flash = 0.1;
+        burst (b.x, b.y + b.h, 4, C.gold, 50);
+        if (e.hp <= 0) killEnemy(e);
+      }
+     }
   }
   blocks = blocks.filter(b => !b.dead);
   bullets = bullets.filter(b => b.life > 0);
@@ -218,6 +228,15 @@ function drawBullets() {
   ctx.fillStyle = C.gold;
   for (const b of bullets) ctx.fillRect(Math.floor(b.x), Math.floor(b.y), b.w, b.h);
   
+}
+function updatePlay(dt) {
+  updatePlayer(dt);
+  updateShooting(dt);
+  updateBullets(dt);
+  updateEnemies(dt);
+  updateParticles(dt);
+  updateCamera();
+  updateWorld();
 }
 reset();
 
@@ -246,6 +265,7 @@ function draw() {
   drawWalls(cy);
   drawBlocks();
    if (state !== 'dead') drawPlayer();
+   drawEnemies();
   drawBullets();
   drawParticles();
   ctx.restore();
@@ -272,8 +292,10 @@ function text(str, x, y, color = C.fg, align = 'left') {
 function hurtPlayer() {
   const p = player;
   if (p.invuln > 0) return;      
+  p.hp--;
    p.invuln = 1.2;                
-  p.vy = -120;                   
+  p.vy = -120;   
+  p.combo = 0;    
   shake = 6;
   hitstop = 0.1;                
    burst(p.x + 3, p.y + 4, 10, C.red, 80);
@@ -327,14 +349,68 @@ function drawGameOver() {
   text('BEST ' + best + 'm', W / 2, 133, C.fg, 'center');
    if (deadTimer > 0.7) text('SPACE: RETRY', W / 2, 170, C.fg, 'center');
 }
-
- function updatePlay(dt) {
-  updatePlayer(dt);
-  updateShooting(dt);
-  updateBullets(dt);
-  updateParticles(dt);
-  updateCamera();
-  updateWorld();
+function spawnEnemy(y) {
+   const spiked = Math.random() < 0.3;           
+  enemies.push({
+     type: spiked ? 'spike' : 'blob',
+    x : rand(WALL + 4, W - WALL - 12),
+    y,  y0: y,  w: 8, h: 8,
+    hp: spiked ? 2 : 1,
+    vx : (Math.random() < 0.5 ? -1 : 1) * rand(15, 30),
+    t:  rand(0, 6),
+    flash: 0,
+  });
 }
+
+function killEnemy(e) {
+  e.dead =  true;
+  player.combo++;
+   burst(e.x + 4, e.y + 4, 14, C.red, 90);
+   shake = Math.max(shake, 3);
+  hitstop = 0.05;
+}
+
+function updateEnemies(dt) {
+   const p = player;
+  for (const e of enemies) {
+    if (e.dead) continue;
+     e.t += dt;
+    e.flash = Math.max(0, e.flash - dt);
+
+    e.x += e.vx * dt;                                        // patrol sideways
+     if (e.x < WALL)  { e.x = WALL; e.vx *= -1; }
+    if (e.x + e.w > W - WALL) { e.x = W - WALL - e.w; e.vx *= -1; }
+      e.y = e.y0 + Math.sin(e.t * 2.5) * 6;                    // bob up and down
+
+    if (overlap(p, e)) {
+      const stomping = p.vy > 0 && (p.y + p.h - e.y) < 7 && e.type !== 'spike';
+      if (stomping) {
+         killEnemy(e);
+        p.vy = -170;                                         // bounce off it
+        p.ammo = p.maxAmmo;                                  // stomping reloads
+      } else {
+        hurtPlayer();
+      }
+    }
+  }
+  enemies = enemies.filter(e => !e.dead && e.y0 > camY - 60);
+}
+
+function drawEnemies() {
+  for (const e of enemies) {
+    const x = Math.floor(e.x), y = Math.floor(e.y);
+    ctx.fillStyle  = e.flash > 0 ? C.fg : C.red;              // flashes white when hit
+    ctx.fillRect(x, y, 8, 8) ;
+    ctx.fillStyle = C.fg;
+     ctx.fillRect(x + 1, y + 3, 2, 2);                        // eyes
+    ctx.fillRect(x + 5, y + 3, 2, 2);
+    if (e.type === 'spike') {                                // spikes on top
+      ctx.fillRect(x, y - 2, 2, 2) ;
+       ctx.fillRect(x + 3, y - 2, 2, 2);
+      ctx.fillRect(x + 6, y - 2, 2, 2);
+    }
+  }
+}
+
 
 requestAnimationFrame(frame);   
