@@ -152,9 +152,9 @@ function drawPlayer() {
   const p = player;
   if (p.invuln > 0 && Math.floor(p.invuln * 20) % 2 === 0) return;  
   const x = Math.floor(p.x), y = Math.floor(p.y);
-  ctx.fillStyle = C.fg;  ctx.fillRect(x, y, p.w, 6);                 
+    ctx.fillStyle = C.fg;  ctx.fillRect(x, y, p.w, 6);                 
   ctx.fillStyle = C.bg;  ctx.fillRect(x + 1, y + 2, 1, 2); ctx.fillRect(x + 4, y + 2, 1, 2); 
-  ctx.fillStyle = C.red; ctx.fillRect(x, y + 6, p.w, 2);          
+   ctx.fillStyle = C.red; ctx.fillRect(x, y + 6, p.w, 2);          
 }
 // ---------- particles ----------
 function burst(x, y, n, color, speed) {
@@ -222,25 +222,113 @@ function drawBullets() {
 reset();
 
 function update(dt) {
-  updatePlay(dt);
+  if (state === 'title') {
+    if (pressed.jump) { reset(); state = 'play'; }
+  } else if (state === 'play') {
+    if (hitstop > 0) hitstop -= dt;      
+    else updatePlay(dt);
+  } else if (state === 'dead') {
+    deadTimer += dt;
+    updateParticles(dt);
+    if (deadTimer > 0.7 && pressed.jump) { reset(); state = 'play'; }
+  }
+  shake = Math.max(0, shake - 30 * dt); 
   pressed = {};
 }
-
 function draw() {
+
   const cy = Math.floor(camY);
   ctx.fillStyle = C.bg;
-  ctx.fillRect(0, 0, W, H);
+   ctx.fillRect(0, 0, W, H);
   ctx.save();
-  ctx.translate(Math.round(rand(-shake, shake)), Math.round(-cy + rand(-shake, shake)));
+
+    ctx.translate(Math.round(rand(-shake, shake)), Math.round(-cy + rand(-shake, shake)));
   drawWalls(cy);
   drawBlocks();
-  drawPlayer();
+   if (state !== 'dead') drawPlayer();
   drawBullets();
   drawParticles();
   ctx.restore();
+   if (state !== 'title') drawHUD();
+  if (state === 'title') drawTitle();
+   if (state === 'dead') drawGameOver();
 }
 
-function updatePlay(dt) {
+
+
+let best = 0;
+try { best = Number(localStorage.getItem('gunboots_best')) || 0; } catch (e) {}
+
+const depth = () => Math.max(0, Math.floor(player.y / 10));
+
+function text(str, x, y, color = C.fg, align = 'left') {
+  ctx.fillStyle = color;
+   ctx.textAlign = align;
+   ctx.textBaseline = 'top';
+  ctx.font = '8px "Press Start 2P", monospace';
+  ctx.fillText(str, x, y);
+}
+
+function hurtPlayer() {
+  const p = player;
+  if (p.invuln > 0) return;      
+   p.invuln = 1.2;                
+  p.vy = -120;                   
+  shake = 6;
+  hitstop = 0.1;                
+   burst(p.x + 3, p.y + 4, 10, C.red, 80);
+  if (p.hp <= 0) die();
+}
+
+function die() {
+  state = 'dead';
+  deadTimer = 0;
+  shake = 8;
+  burst(player.x + 3, player.y + 4, 30, C.fg, 120);
+  if (depth() > best) {
+    best = depth();
+    try { localStorage.setItem('gunboots_best', best); } catch (e) {}
+  }
+}
+  function drawHUD() {
+  const p = player;
+  for (let i = 0; i < p.maxHp; i++) {                    // hearts
+    ctx.fillStyle = i < p.hp ? C.red : '#33334d';
+    ctx.fillRect(WALL + 4 + i * 8, 4, 6, 6);
+  }
+  for (let i = 0; i < p.maxAmmo; i++) {                  // ammo pips
+    ctx.fillStyle = i < p.ammo ? C.gold : '#33334d';
+    ctx.fillRect(WALL + 4 + i * 5, 14, 3, 5);
+  }
+  text(depth() + 'm', W - WALL - 4, 4, C.fg, 'right');
+  text(gemCount + 'g', W - WALL - 4, 14, C.gold, 'right');
+}
+
+function drawTitle() {
+  ctx.fillStyle = 'rgba(16,16,24,0.75)';
+   ctx.fillRect(WALL, 0, W - 2 * WALL, H);
+  text('GUNBOOTS', W / 2, 70, C.red, 'center');
+   text('ARROWS: MOVE', W / 2, 110, C.fg, 'center');
+   text('SPACE: JUMP', W / 2, 124, C.fg, 'center');
+   text('HOLD IN AIR:', W / 2, 138, C.fg, 'center');
+  text('SHOOT', W / 2, 150, C.gold, 'center');
+  
+  if (Math.floor(performance.now() / 500) % 2) text('PRESS SPACE', W / 2, 190, C.fg, 'center');
+   if (best) text('BEST ' + best + 'm', W / 2, 210, C.gold, 'center');
+}
+
+function drawGameOver() {
+   ctx.fillStyle = 'rgba(16,16,24,0.7)';
+
+   ctx.fillRect(0, 0, W, H);
+    text('YOU DIED', W / 2, 80, C.red, 'center');
+   text('DEPTH ' + depth() + 'm', W / 2, 105, C.fg, 'center');
+  text('GEMS ' + gemCount, W / 2, 119, C.gold, 'center');
+  text('BEST ' + best + 'm', W / 2, 133, C.fg, 'center');
+   if (deadTimer > 0.7) text('SPACE: RETRY', W / 2, 170, C.fg, 'center');
+}
+
+ function updatePlay(dt) {
   updatePlayer(dt);
   updateShooting(dt);
   updateBullets(dt);
