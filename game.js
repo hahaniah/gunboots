@@ -66,7 +66,7 @@ function generateChunk(y) {
     blocks.push({ x, y: y + randInt(0, 4) * 8, w, h: 8 });
   }
     if (Math.random() < 0.7) spawnEnemy(y + randInt(0,5) * 8);  }
-{}
+
 
 function updateWorld() {
   while (nextGenY < camY + H + 64) {
@@ -133,6 +133,7 @@ function updatePlayer(dt) {
 
   
   p.y += p.vy * dt;
+  const wasGround = p.onGround;
   p.onGround = false;
   for (const b of blocks) {
     if (overlap(p, b)) {
@@ -141,6 +142,7 @@ function updatePlayer(dt) {
       p.vy = 0;
     }
   }
+     if (p.onGround && !wasGround) burst(p.x + 3, p.y + 8, 5, C.fg, 30);
 }
 
 function updateCamera() {
@@ -155,7 +157,12 @@ function drawPlayer() {
   const x = Math.floor(p.x), y = Math.floor(p.y);
     ctx.fillStyle = C.fg;  ctx.fillRect(x, y, p.w, 6);                 
   ctx.fillStyle = C.bg;  ctx.fillRect(x + 1, y + 2, 1, 2); ctx.fillRect(x + 4, y + 2, 1, 2); 
-   ctx.fillStyle = C.red; ctx.fillRect(x, y + 6, p.w, 2);          
+   ctx.fillStyle = C.red; ctx.fillRect(x, y + 6, p.w, 2);     
+   
+   if (keys.jump && !p.onGround && p.ammo > 0 && p.shootCd > 0.04) {
+    ctx.fillStyle = C.gold;
+    ctx.fillRect(x+ 2, y+ 8,2,3);
+}
 }
 
 function burst(x, y, n, color, speed) {
@@ -229,16 +236,72 @@ function drawBullets() {
   for (const b of bullets) ctx.fillRect(Math.floor(b.x), Math.floor(b.y), b.w, b.h);
   
 }
+function dropGems(x, y, n) {
+  for (let i = 0; i < n; i++) {
+    gems.push({ x, y, w: 4, h: 4, vx: rand(-40, 40), vy: rand(-90, -30) });
+  }
+}
+
+function updateGems(dt) {
+  const p = player;
+  for (const g of gems) {
+    g.vy = Math.min(g.vy+ 300 * dt, 90);     
+    g.x += g.vx * dt;
+    g.y += g.vy* dt;
+    g.vx *= 0.98;
+    g.x = Math.max(WALL, Math.min(W - WALL- g.w, g.x));
+
+    const dx = (p.x + p.w / 2) - (g.x + 2);
+    const dy = (p.y + p.h / 2) - (g.y + 2);
+    if (dx * dx + dy * dy < 100) {          
+      g.dead = true;
+      gemCount++;
+      burst(g.x + 2, g.y + 2, 3, C.gold, 30);
+    }
+  }
+  gems = gems.filter(g => !g.dead && g.y < camY + H + 20);
+}
+
+function drawGems() {
+  ctx.fillStyle = C.gold;
+  for (const g of gems) {
+    const x = Math.floor(g.x), y = Math.floor(g.y);
+    ctx.fillRect(x + 1, y, 2, 4);             
+    ctx.fillRect(x, y + 1, 4, 2);
+  }
+}
+
+function drawCombo() {
+  if (state === 'play' && player.combo >= 2) {
+    text('x' + player.combo, W / 2, 30, C.gold, 'center');
+  }
+}
+    
 function updatePlay(dt) {
   updatePlayer(dt);
   updateShooting(dt);
   updateBullets(dt);
   updateEnemies(dt);
+  updateGems(dt);
   updateParticles(dt);
   updateCamera();
   updateWorld();
 }
 reset();
+const dots = Array.from({ length: 30 }, () => ({
+  x: rand(WALL, W - WALL),
+  y: rand(0, H),
+  s: randInt(1, 2),
+}));
+
+function drawDots(cy) {
+  ctx.fillStyle = '#2c2c44';
+  for (const d of dots) {
+   const y = (((d.y - cy * 0.3 * d.s) % H) + H) % H;   // moves slower than the world
+    ctx.fillRect(Math.floor(d.x), Math.floor(y), 1, d.s);
+  }
+}
+
 
 function update(dt) {
   if (state === 'title') {
@@ -259,17 +322,19 @@ function draw() {
   const cy = Math.floor(camY);
   ctx.fillStyle = C.bg;
    ctx.fillRect(0, 0, W, H);
+   drawDots(cy);
   ctx.save();
-
     ctx.translate(Math.round(rand(-shake, shake)), Math.round(-cy + rand(-shake, shake)));
   drawWalls(cy);
   drawBlocks();
-   if (state !== 'dead') drawPlayer();
+   drawGems();
    drawEnemies();
+   if (state !== 'dead') drawPlayer();
   drawBullets();
   drawParticles();
   ctx.restore();
    if (state !== 'title') drawHUD();
+   drawCombo();
   if (state === 'title') drawTitle();
    if (state === 'dead') drawGameOver();
 }
@@ -357,16 +422,18 @@ function spawnEnemy(y) {
     y,  y0: y,  w: 8, h: 8,
     hp: spiked ? 2 : 1,
     vx : (Math.random() < 0.5 ? -1 : 1) * rand(15, 30),
-    t:  rand(0, 6),
+    t:  rand(0, 6),   
     flash: 0,
   });
 }
 
 function killEnemy(e) {
-  e.dead =  true;
+   e.dead = true;
   player.combo++;
-   burst(e.x + 4, e.y + 4, 14, C.red, 90);
-   shake = Math.max(shake, 3);
+  dropGems(e.x + 4, e.y + 4, 1 + Math.floor(player.combo / 3));   // bigger combo = more gems
+  if (player.combo % 6 === 0 && player.hp < player.maxHp) player.hp++;   // every 6th kill heals
+  burst(e.x + 4, e.y + 4, 14, C.red, 90);
+  shake = Math.max(shake, 3);
   hitstop = 0.05;
 }
 
