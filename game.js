@@ -22,6 +22,7 @@ addEventListener('keydown', e => {
   e.preventDefault();
   if (!keys[a]) pressed[a] = true;
   keys[a] = true;
+  startAudio();
 });
 addEventListener('keyup', e => {
   const a = keyMap[e.code];
@@ -117,7 +118,8 @@ function updatePlayer(dt) {
   if (pressed.jump && p.onGround) {
     p.vy = -JUMP;
     p.onGround = false;
-    p.shootCd = 0.15;          
+    p.shootCd = 0.15;       
+    beep(300, 0.12, 'square' ,0.06, 200);
   }
   p.vy = Math.min(p.vy + GRAVITY * dt, MAX_FALL);  
 
@@ -199,6 +201,7 @@ function updateShooting(dt) {
 
   if (keys.jump && p.shootCd <= 0 && p.ammo > 0) {
     p.ammo--;
+    beep( 220, 0.08, 'square', 0.05, -120);
     p.shootCd = 0.11;                                   
     bullets.push({ x: p.x + p.w / 2 - 1, y: p.y + p.h, w: 2, h: 6, vy: 320, life: 0.45 });
     if (p.vy > -60) p.vy = Math.max(p.vy - 45, -60);   
@@ -212,6 +215,7 @@ function updateBullets(dt) {
     for (const bl of blocks) {                  
       if (overlap(b, bl)) {
         bl.dead = true;
+        beep (90, 0.08, 'square', 0.05, -40);
         b.life = 0;
         burst(bl.x + bl.w / 2, bl.y + bl.h / 2, 8, C.fg, 70);
         shake = Math.max(shake, 1.5);
@@ -256,6 +260,7 @@ function updateGems(dt) {
     if (dx * dx + dy * dy < 100) {          
       g.dead = true;
       gemCount++;
+      beep (900 + Math.min(player.combo, 8) * 60, 0.06, 'triangle', 0.06);
       burst(g.x + 2, g.y + 2, 3, C.gold, 30);
     }
   }
@@ -275,6 +280,29 @@ function drawCombo() {
   if (state === 'play' && player.combo >= 2) {
     text('x' + player.combo, W / 2, 30, C.gold, 'center');
   }
+}
+
+let ac;
+
+function startAudio(){
+  if(!ac) ac= new AudioContext();
+  ac.resume();
+}
+
+function beep(f,len, type, vol, slide) {
+  if (!ac) return;
+  let t =ac.currentTime;
+  let o=ac.createOscillator();
+  let g = ac.createGain();
+  o.type= type || 'square' ;
+  o.frequency.setValueAtTime(f, t);
+  if(slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, f + slide),t + len);
+  g.gain.setValueAtTime(vol || 0.06, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t+len);
+  o.connect(g);
+  g.connect(ac.destination);
+  o.start(t);
+  o.stop(t+len);
 }
     
 function updatePlay(dt) {
@@ -356,7 +384,8 @@ function text(str, x, y, color = C.fg, align = 'left') {
 
 function hurtPlayer() {
   const p = player;
-  if (p.invuln > 0) return;      
+  if (p.invuln > 0) return;  
+  beep (110, 0.25, 'sawtooth', 0.12, -70);
   p.hp--;
    p.invuln = 1.2;                
   p.vy = -120;   
@@ -370,6 +399,7 @@ function hurtPlayer() {
 function die() {
   state = 'dead';
   deadTimer = 0;
+  beep (80, 0.5, 'sawtooth', 0.12, -40);
   shake = 8;
   burst(player.x + 3, player.y + 4, 30, C.fg, 120);
   if (depth() > best) {
@@ -429,6 +459,7 @@ function spawnEnemy(y) {
 
 function killEnemy(e) {
    e.dead = true;
+   beep (500, 0.12,'sawtooth', 0.07,-250);
   player.combo++;
   dropGems(e.x + 4, e.y + 4, 1 + Math.floor(player.combo / 3));   // bigger combo = more gems
   if (player.combo % 6 === 0 && player.hp < player.maxHp) player.hp++;   // every 6th kill heals
@@ -453,6 +484,7 @@ function updateEnemies(dt) {
       const stomping = p.vy > 0 && (p.y + p.h - e.y) < 7 && e.type !== 'spike';
       if (stomping) {
          killEnemy(e);
+         beep (150, 0.15, 'sawtooth', 0.1, -80);
         p.vy = -170;                                         // bounce off it
         p.ammo = p.maxAmmo;                                  // stomping reloads
       } else {
