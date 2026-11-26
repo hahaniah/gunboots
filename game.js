@@ -4,11 +4,20 @@ const C = { bg: '#101018', fg: '#f4f1e8', red: '#ff3d5a', gold: '#ffd23f' };
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
-canvas.width = W;
-canvas.height = H;
+const S = 4;
+canvas.width = W *S;
+canvas.height = H*S;
 document.fonts.load('8px "Press Start 2P"');
 
-
+function loadImg(name) {
+  let im = new Image();
+  im.src = 'art/' + name + '.png'
+  return im;
+}
+function ok(im) {
+  return im.complete && im.naturalWidth > 0;
+}
+const imgPlayer = loadImg ('player');
 const keys = {};       
 let pressed = {};      
 const keyMap = {
@@ -60,14 +69,16 @@ function reset() {
 
 
 function generateChunk(y) {
-  const n = randInt(1, 3);
-  for (let i = 0; i < n; i++) {
-    const w = randInt(3, 7) * 8;
-    const x = WALL + randInt(0, Math.floor((W - 2 * WALL - w) / 8)) * 8;
+  const n = randInt(1,3);
+  for (let i =0; i<n; i++) {
+    const w =randInt(3,7) * 8;
+    const x= WALL + randInt(0, Math.floor((W-2 * WALL -w) /8)) * 8;
     blocks.push({ x, y: y + randInt(0, 4) * 8, w, h: 8 });
   }
-    if (Math.random() < 0.7) spawnEnemy(y + randInt(0,5) * 8);  }
-
+  let chance = Math.min ( 0.95, 0.5 + y /6000);
+  if (Math.random() < chance) spawnEnemy(y + randInt(0,5) * 8);
+  if (y > 3000 && Math.random() <0.4) spawnEnemy(y + randInt(0,5) * 8);
+}
 
 function updateWorld() {
   while (nextGenY < camY + H + 64) {
@@ -155,15 +166,24 @@ function updateCamera() {
 
 function drawPlayer() {
   const p = player;
-  if (p.invuln > 0 && Math.floor(p.invuln * 20) % 2 === 0) return;  
-  const x = Math.floor(p.x), y = Math.floor(p.y);
-    ctx.fillStyle = C.fg;  ctx.fillRect(x, y, p.w, 6);                 
-  ctx.fillStyle = C.bg;  ctx.fillRect(x + 1, y + 2, 1, 2); ctx.fillRect(x + 4, y + 2, 1, 2); 
-   ctx.fillStyle = C.red; ctx.fillRect(x, y + 6, p.w, 2);     
-   
-   if (keys.jump && !p.onGround && p.ammo > 0 && p.shootCd > 0.04) {
-    ctx.fillStyle = C.gold;
-    ctx.fillRect(x+ 2, y+ 8,2,3);
+  if (p.invuln > 0 && Math.floor (p.invuln * 20) % 2 === 0) return;
+
+  if (ok(imgPlayer)) {
+    let w = 10;
+    let h = w * imgPlayer.naturalHeight / imgPlayer.naturalWidth;
+    let x = p.x + p.w / 2 - w /2;
+    let y = p.y + p.h - h;
+    ctx.drawImage(imgPlayer, x, y, w, h);
+  } else {
+    let x = Math.floor(p.x), y = Math.floor(p.y);
+    ctx.fillStyle = C.fg; ctx.fillRect(x, y, p.w, 6);
+    ctx.fillStyle = C.bg; ctx.fillRect(x+ 1, y+2, 1, 2); ctx.fillRect(x + 4, y +2, 1, 2);
+    ctx.fillStyle = C.red; ctx.fillRect(x,y+6, p.w, 2);
+}
+
+if (keys.jump && !p.onGround && p.ammo > 0 && p.shootCd > 0.04) {
+  ctx.fillStyle = C.gold;
+  ctx.fillRect(Math.floor(p.x) + 2, Math.floor(p.y) + 8, 2, 2);
 }
 }
 
@@ -347,6 +367,7 @@ function update(dt) {
 }
 function draw() {
 
+  ctx.setTransform(S, 0, 0, S, 0, 0);
   const cy = Math.floor(camY);
   ctx.fillStyle = C.bg;
    ctx.fillRect(0, 0, W, H);
@@ -445,7 +466,7 @@ function drawGameOver() {
    if (deadTimer > 0.7) text('SPACE: RETRY', W / 2, 170, C.fg, 'center');
 }
 function spawnEnemy(y) {
-   const spiked = Math.random() < 0.3;           
+   const spiked = Math.random() < Math.min(0.5, 0.2 + y / 10000);
   enemies.push({
      type: spiked ? 'spike' : 'blob',
     x : rand(WALL + 4, W - WALL - 12),
