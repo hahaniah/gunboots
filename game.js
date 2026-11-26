@@ -11,13 +11,17 @@ document.fonts.load('8px "Press Start 2P"');
 
 function loadImg(name) {
   let im = new Image();
-  im.src = 'art/' + name + '.png'
+im.src = name + '.png' ;
   return im;
 }
 function ok(im) {
   return im.complete && im.naturalWidth > 0;
 }
 const imgPlayer = loadImg ('player');
+const imgJelly = [loadImg('jelly1'), loadImg('jelly2')];
+const imgPuffer = [loadImg('puffer1'), loadImg('puffer2')];
+const imgGem = loadImg('gem');
+
 const keys = {};       
 let pressed = {};      
 const keyMap = {
@@ -70,14 +74,23 @@ function reset() {
 
 function generateChunk(y) {
   const n = randInt(1,3);
-  for (let i =0; i<n; i++) {
-    const w =randInt(3,7) * 8;
-    const x= WALL + randInt(0, Math.floor((W-2 * WALL -w) /8)) * 8;
-    blocks.push({ x, y: y + randInt(0, 4) * 8, w, h: 8 });
+  let made = [];
+  for (let i = 0; i < n; i++) {
+    const w = randInt (3,7) * 8;
+    const x = WALL + randInt(0, Math.floor((W -2 * WALL- w) / 8)) * 8;
+    let b = { x, y: y + randInt(0, 4) * 8, w, h: 8 };
+    blocks.push(b);
+    made.push(b);
   }
-  let chance = Math.min ( 0.95, 0.5 + y /6000);
+
+  if (Math.random() < 0.55) {
+    let b = made[randInt(0, made.length - 1)];
+   gems.push({ x: b.x + rand(3, b.w - 7), y: b.y - 6, w: 4, h: 4, vx: 0, vy: 0, still: true, t: rand(0, 6) });
+
+  }
+  let chance = Math.min(0.95, 0.5 + y /6000);
   if (Math.random() < chance) spawnEnemy(y + randInt(0,5) * 8);
-  if (y > 3000 && Math.random() <0.4) spawnEnemy(y + randInt(0,5) * 8);
+  if (y > 3000 && Math.random() < 0.4) spawnEnemy(y+randInt(0,5) * 8);
 }
 
 function updateWorld() {
@@ -169,11 +182,11 @@ function drawPlayer() {
   if (p.invuln > 0 && Math.floor (p.invuln * 20) % 2 === 0) return;
 
   if (ok(imgPlayer)) {
-    let w = 10;
+    let w = 22;
     let h = w * imgPlayer.naturalHeight / imgPlayer.naturalWidth;
     let x = p.x + p.w / 2 - w /2;
     let y = p.y + p.h - h;
-    ctx.drawImage(imgPlayer, x, y, w, h);
+    ctx.drawImage(imgPlayer, x, y, w, h)
   } else {
     let x = Math.floor(p.x), y = Math.floor(p.y);
     ctx.fillStyle = C.fg; ctx.fillRect(x, y, p.w, 6);
@@ -268,31 +281,40 @@ function dropGems(x, y, n) {
 
 function updateGems(dt) {
   const p = player;
-  for (const g of gems) {
-    g.vy = Math.min(g.vy+ 300 * dt, 90);     
-    g.x += g.vx * dt;
-    g.y += g.vy* dt;
-    g.vx *= 0.98;
-    g.x = Math.max(WALL, Math.min(W - WALL- g.w, g.x));
+   for (const g of gems) {
+    if (g.still) {
+      g.t += dt;
+    } else {
+      g.vy = Math.min(g.vy + 300 * dt, 90);
+      g.x += g.vx * dt;
+      g.y += g.vy * dt;
+      g.vx *= 0.98;
+      g.x = Math.max (WALL, Math.min(W-WALL - g.w, g.x));
+    }
 
-    const dx = (p.x + p.w / 2) - (g.x + 2);
-    const dy = (p.y + p.h / 2) - (g.y + 2);
-    if (dx * dx + dy * dy < 100) {          
+    const dx = (p.x + p.w / 2) - (g.x+2);
+    const dy = (p.y + p.h /2) - (g.y + 2);
+    if (dx * dx + dy * dy < 100) {
       g.dead = true;
       gemCount++;
-      beep (900 + Math.min(player.combo, 8) * 60, 0.06, 'triangle', 0.06);
-      burst(g.x + 2, g.y + 2, 3, C.gold, 30);
+      beep(900 + Math.min(player.combo, 8) * 60, 0.06, 'triangle', 0.06);
+      burst (g.x + 2, g.y + 2,3, C.gold, 30);
     }
+   }
+   gems = gems.filter(g => !g.dead && g.y > camY - 40 && (g.still || g.y < camY + H + 20));  
   }
-  gems = gems.filter(g => !g.dead && g.y < camY + H + 20);
-}
 
 function drawGems() {
-  ctx.fillStyle = C.gold;
-  for (const g of gems) {
-    const x = Math.floor(g.x), y = Math.floor(g.y);
-    ctx.fillRect(x + 1, y, 2, 4);             
-    ctx.fillRect(x, y + 1, 4, 2);
+   for (const g of gems) {
+    let bob = g.still ? Math.sin(g.t * 3) : 0;
+    if (ok(imgGem)) {
+      let w = 12;
+      let h = w * imgGem.naturalHeight / imgGem.naturalWidth;
+      ctx.drawImage(imgGem, g.x + 2 - w / 2, g.y + 2 - h / 2 + bob, w, h);
+    } else {
+      ctx.fillStyle = C.gold;
+      ctx.fillRect(Math.floor(g.x), Math.floor(g.y + bob), 4, 4);
+    }
   }
 }
 
@@ -518,16 +540,19 @@ function updateEnemies(dt) {
 
 function drawEnemies() {
   for (const e of enemies) {
-    const x = Math.floor(e.x), y = Math.floor(e.y);
-    ctx.fillStyle  = e.flash > 0 ? C.fg : C.red;              // flashes white when hit
-    ctx.fillRect(x, y, 8, 8) ;
-    ctx.fillStyle = C.fg;
-     ctx.fillRect(x + 1, y + 3, 2, 2);                        // eyes
-    ctx.fillRect(x + 5, y + 3, 2, 2);
-    if (e.type === 'spike') {                                // spikes on top
-      ctx.fillRect(x, y - 2, 2, 2) ;
-       ctx.fillRect(x + 3, y - 2, 2, 2);
-      ctx.fillRect(x + 6, y - 2, 2, 2);
+    let pics = e.type === 'spike' ? imgPuffer : imgJelly;
+    let im = pics[Math.floor(e.t*4) %2];
+    let size = 14;
+    let x = e.x + e.w /2 - size /2;
+    let y= e.y + e.h /2 -size /2;
+
+    if (ok(im)) {
+      if (e.flash > 0) ctx.globalAlpha = 0.4;
+      ctx.drawImage(im, x, y, size, size);
+      ctx.globalAlpha = 1;
+    } else {
+      ctx.fillStyle = C.red;
+      ctx.fillRect(Math.floor(e.x), Math.floor(e.y), 8, 8);
     }
   }
 }
