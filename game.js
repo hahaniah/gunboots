@@ -365,11 +365,52 @@ const dots = Array.from({ length: 30 }, () => ({
 }));
 
 function drawDots(cy) {
-  ctx.fillStyle = '#2c2c44';
+  ctx.fillStyle = 'rgba(200, 240, 255, 0.3)';
   for (const d of dots) {
    const y = (((d.y - cy * 0.3 * d.s) % H) + H) % H;   // moves slower than the world
     ctx.fillRect(Math.floor(d.x), Math.floor(y), 1, d.s);
   }
+}
+  const bubbles = Array.from({ length: 25}, () => ({
+    x: rand(WALL + 4, W- WALL - 4),
+    y: rand(0,H),
+    r: rand(0.6, 2),
+    sp: rand(6,18),
+    wob: rand(0, 6),
+  }));
+  function blend(a, b, t) {
+    return Math.round(a+(b-a) * t);
+  }
+  function drawSea(cy) {
+    let t = performance.now() /1000;
+    let d = Math.min(1, cy / 6000);
+
+    let top = 'rgb(' + blend(22, 6, d) + ',' + blend(70, 14, d)+ ',' + blend(100, 34, d) +')';
+    let bot = 'rgb(' + blend(10, 4, d) + ',' + blend (36, 8, d) + ',' + blend (66, 20, d) + ')';
+    let g = ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0, top);
+    g.addColorStop(1,bot);
+    ctx.fillStyle = g;
+    ctx.fillRect (0,0, W, H);
+    ctx.fillStyle = 'rgba(180, 240, 255,' + (0.08 * (1-d)) + ')';
+    for (let i = 0; i < 4; i++) {
+      let x = 15 + i * 40 + Math.sin(t/3 + i) * 8;
+      ctx. beginPath ();
+      ctx.moveTo(x,0);
+      ctx.lineTo(x+ 14, 0);
+      ctx.lineTo(x + 44, H);
+      ctx.lineTo(x + 20, H);
+      ctx.fill();
+    }
+    ctx.strokeStyle = 'rgba(200, 240, 255, 0.5)';
+    ctx.lineWidth = 0.5;
+    for (const b of bubbles) {
+      let y = (((b.y - t * b.sp - cy * 0.4) % H) + H) % H;
+      let x = b.x + Math.sin(t + b.wob) * 3;
+      ctx. beginPath();
+      ctx.arc(x, y, b.r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
 }
 
 
@@ -391,8 +432,7 @@ function draw() {
 
   ctx.setTransform(S, 0, 0, S, 0, 0);
   const cy = Math.floor(camY);
-  ctx.fillStyle = C.bg;
-   ctx.fillRect(0, 0, W, H);
+  drawSea(cy);
    drawDots(cy);
   ctx.save();
     ctx.translate(Math.round(rand(-shake, shake)), Math.round(-cy + rand(-shake, shake)));
